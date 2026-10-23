@@ -323,12 +323,13 @@
     box-shadow:0 0 0 1px var(--chip-rim);
   }
   @keyframes chipToss{
-    0%   {opacity:0;transform:translate(-50%,-50%) translate3d(0,0,0) scale(.6) rotate(calc(var(--rot,0deg) - 140deg));}
-    20%  {opacity:1;}
-    /* 中途抛高一点，像被甩出去（中点由脚本算好，避免每帧解析 calc） */
+    0%   {opacity:0;transform:translate(-50%,-50%) translate3d(0,0,0) scale(.94) rotate(calc(var(--rot,0deg) - 120deg));}
+    18%  {opacity:1;}
+    /* 中途抛高一点，像被甩出去（中点由脚本算好，避免每帧解析 calc）；
+       不再做缩放弹跳，落地就是最终大小 */
     55%  {transform:translate(-50%,-50%)
             translate3d(var(--mx,0px), var(--my,0px), 0)
-            scale(1.06) rotate(calc(var(--rot,0deg) - 55deg));}
+            scale(1) rotate(calc(var(--rot,0deg) - 45deg));}
     100% {opacity:1;transform:translate(-50%,-50%) translate3d(var(--dx,0px), var(--dy,0px), 0) scale(1) rotate(var(--rot,0deg));}
   }
 
@@ -2153,12 +2154,30 @@ function renderTableChips(){
 }
 
 /* 落地：只把这一枚插进去，已经在桌上的一个都不动 */
-function addTableChip(v, spot){
+function addTableChip(v, spot, liveEl){
   var el = document.getElementById('chipPile');
   var idx = G.tableChips.length;    // 这枚是第几个落下的
   pushTableChip(v);
-  if (!el) return;
-  el.appendChild(makeChipEl(v, chipClass(v), spot, idx));
+  if (!el){
+    if (liveEl && liveEl.parentNode) liveEl.parentNode.removeChild(liveEl);
+    return;
+  }
+  var node;
+  if (liveEl){
+    /* 飞行中的那枚直接「转正」当成桌上的筹码：不删了重建，视觉上就不会闪一下 */
+    liveEl.classList.remove('fly');
+    liveEl.style.left = '';
+    liveEl.style.top = '';
+    liveEl.style.removeProperty('--mx');
+    liveEl.style.removeProperty('--my');
+    liveEl.style.setProperty('--dx', spot.dx.toFixed(1) + 'px');
+    liveEl.style.setProperty('--dy', spot.dy.toFixed(1) + 'px');
+    liveEl.style.zIndex = 100 + idx;
+    node = liveEl;
+  } else {
+    node = makeChipEl(v, chipClass(v), spot, idx);
+  }
+  el.appendChild(node);
   el.classList.add('on');
   G.chipDrawn = G.tableChips.length;
 }
@@ -2225,9 +2244,11 @@ function flyChips(p, amount, startIdx){
       layer.appendChild(c);
 
       setTimeout(function(){
-        if (c.parentNode) c.parentNode.removeChild(c);
-        if (token !== G.chipSeq) return;       // 已经换局，别加到新一局桌上
-        addTableChip(list[i].v, spot);
+        if (token !== G.chipSeq){              // 已经换局，这枚直接扔掉
+          if (c.parentNode) c.parentNode.removeChild(c);
+          return;
+        }
+        addTableChip(list[i].v, spot, c);       // 飞完就地转正，位置不再动
       }, DUR + i * GAP);
     })(i);
   }
