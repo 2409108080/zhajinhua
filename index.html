@@ -2087,11 +2087,12 @@ function chipSpot(i, bs){
   var ang = prand(i * 4 + 1) * Math.PI * 2;
   var rad = (narrow ? 0.46 : 0.26) + Math.sqrt(prand(i * 4 + 2)) * (narrow ? 0.54 : 0.74);
   var rx = Math.min(bs.w * (narrow ? 0.26 : 0.20), 205);
-  var ry = Math.min(bs.h * (narrow ? 0.19 : 0.15), 96);
+  var ry = Math.min(bs.h * (narrow ? 0.09 : 0.15), 96);
   var sin = Math.sin(ang);
   return {
     dx: Math.cos(ang) * rad * rx,
-    dy: sin * rad * ry * (sin > 0 ? 0.86 : 1),   /* 下方收一点，别压到操作栏 */
+    /* 手机端：筹码整体下移到“底池”和操作栏之间那块空地，别糊在底池数字和座位牌上 */
+    dy: (narrow ? bs.h * 0.13 : 0) + sin * rad * ry * (sin > 0 ? 0.86 : 1),
     rot: Math.round(prand(i * 4 + 3) * 96 - 48)
   };
 }
