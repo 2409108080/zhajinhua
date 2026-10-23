@@ -2089,7 +2089,11 @@ function chipSpot(i, bs){
   bs = bs || boardSize();
   var narrow = bs.w < 620;
   var ang = prand(i * 4 + 1) * Math.PI * 2;
-  var rad = (narrow ? 0.46 : 0.26) + Math.sqrt(prand(i * 4 + 2)) * (narrow ? 0.54 : 0.74);
+  /* 手机端不放「空心圈」：内半径压到 0.1 并且按均匀分布撒，
+     筹码会铺到底池数字背后和下方，中间那块就不会一直空着
+     （数字层级在上面，照样看得清） */
+  var rr = prand(i * 4 + 2);
+  var rad = narrow ? (0.10 + rr * 0.90) : (0.26 + Math.sqrt(rr) * 0.74);
   var rx = Math.min(bs.w * (narrow ? 0.26 : 0.20), 205);
   var ry = Math.min(bs.h * (narrow ? 0.09 : 0.15), 96);
   var sin = Math.sin(ang);
