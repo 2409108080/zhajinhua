@@ -1362,6 +1362,7 @@ function startHand(){
   G.result = null;
   G.logs = [];
   G.tableChips = [];        // 上一局的筹码收走
+  G.spotSeq = 0;            // 落点序号从头开始
   G.chipSeq++;
   G.animating = false;
 
@@ -2116,9 +2117,13 @@ function makeChipEl(v, cls, spot, idx){
   return c;
 }
 
-/* 往桌上放一枚筹码：放上去就一直留着，不合并、不折算 */
-function pushTableChip(v){
-  G.tableChips.push({ v: v, cls: chipClass(v) });
+/* 往桌上放一枚筹码：放上去就一直留着，不合并、不折算。
+   落点跟着筹码一起存下来 —— 重排时按原落点还原，绝不会自己再跑一次 */
+function pushTableChip(v, spot){
+  G.tableChips.push({
+    v: v, cls: chipClass(v),
+    spot: spot ? { dx: spot.dx, dy: spot.dy, rot: spot.rot } : null
+  });
 }
 
 /* 整体重排：只在开局清桌、或窗口尺寸变了时才跑，平时不碰 */
@@ -2145,7 +2150,8 @@ function renderTableChips(){
 
   var frag = document.createDocumentFragment();
   for (var i = 0; i < G.tableChips.length; i++){
-    frag.appendChild(makeChipEl(G.tableChips[i].v, G.tableChips[i].cls, chipSpot(i, bs), i));
+    frag.appendChild(makeChipEl(G.tableChips[i].v, G.tableChips[i].cls,
+      G.tableChips[i].spot || chipSpot(i, bs), i));
   }
   el.innerHTML = '';
   el.appendChild(frag);
@@ -2157,7 +2163,7 @@ function renderTableChips(){
 function addTableChip(v, spot, liveEl){
   var el = document.getElementById('chipPile');
   var idx = G.tableChips.length;    // 这枚是第几个落下的
-  pushTableChip(v);
+  pushTableChip(v, spot);
   if (!el){
     if (liveEl && liveEl.parentNode) liveEl.parentNode.removeChild(liveEl);
     return;
@@ -2217,7 +2223,10 @@ function flyChips(p, amount, startIdx){
   if (!list.length) list = [CHIP_DENOMS[5]];
 
   var token = G.chipSeq;
-  var start = (startIdx != null) ? startIdx : G.tableChips.length;
+  /* 落点序号单独走一个计数器：同时有几家在扔筹码时也不会算出同一个点
+     （之前用「已落桌数量」当序号，先扔的还在飞、后扔的已经占了号，重排后就错位乱飞） */
+  var start = (startIdx != null) ? startIdx : (G.spotSeq || 0);
+  if (G.spotSeq == null || G.spotSeq < start + list.length) G.spotSeq = start + list.length;
   var DUR = 560, GAP = 42;
 
   for (var i = 0; i < list.length; i++){
