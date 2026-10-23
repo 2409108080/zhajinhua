@@ -1433,13 +1433,13 @@ function startHand(){
     var antePlayers = G.players.filter(function(x){ return !x.out; });
     var wait = 0;
     for (var a2 = 0; a2 < antePlayers.length; a2++){
-      (function(pl, d){
+      (function(pl, d, slot){
         wait = Math.max(wait, d + 780);
         setTimeout(function(){
           if (dealToken !== G.dealSeq) return;
-          flyChips(pl, CONFIG.ante, a2);
+          flyChips(pl, CONFIG.ante, slot);   /* 每家的底注用各自的落点，别挤成一摞 */
         }, d);
-      })(antePlayers[a2], 140 + a2 * 150);
+      })(antePlayers[a2], 140 + a2 * 150, a2);
     }
     setTimeout(function(){
       if (dealToken !== G.dealSeq) return;
@@ -2188,7 +2188,9 @@ function flyChips(p, amount, startIdx){
   var center = { x: bs.w / 2, y: bs.h * 0.46 };
   if (pile){
     var pr = pile.getBoundingClientRect();
-    if (pr.width || pr.height) center = { x: pr.left - brd.left + pr.width / 2, y: pr.top - brd.top + pr.height / 2 };
+    /* 筹码堆是 0 宽 0 高，rect 的左上角就是落点原点：
+       这里必须用它本身，否则会退回到估算坐标，飞完和真落点对不上 */
+    center = { x: pr.left - brd.left, y: pr.top - brd.top };
   }
 
   /* 一次最多甩 4 枚，够看又不拖帧 */
