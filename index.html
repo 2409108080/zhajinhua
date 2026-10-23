@@ -2629,6 +2629,10 @@ function renderActions(){
   var cmpPaid = Math.min(compareCost(p), p.chips);
   var lvl = nextStakeLevel();
   var canRaise = lvl > G.unit && p.chips > 0;
+  /* 看牌后加注要付 2 倍，按钮上写的「加注到 X」是注额不是实付，
+     实付和注额不一致时补一行「付 X」，免得看着像加注比跟注还便宜 */
+  var raiseNeed = p.seen ? lvl * 2 : lvl;
+  var raisePaid = Math.min(raiseNeed, p.chips);
 
   /* 看牌和弃牌二选一：闷牌时只能看牌，看过牌之后才能弃牌 */
   var html = '';
@@ -2636,7 +2640,8 @@ function renderActions(){
     html += '<button class="btn-see" id="aLook">看牌</button>';
   }
   html += '<button class="btn-primary" id="aCall">跟注 ' + callPaid + '</button>';
-  if (canRaise) html += '<button class="btn-gold btn-2line" id="aRaise">加注到 ' + lvl + '</button>';
+  if (canRaise) html += '<button class="btn-gold btn-2line" id="aRaise">加注到 ' + lvl +
+                        (raiseNeed !== lvl ? '<small>付 ' + raisePaid + '</small>' : '') + '</button>';
   html += '<button class="btn-ghost" id="aCmp">比牌 ' + cmpPaid + '</button>';
   if (p.seen) html += '<button class="btn-warn" id="aFold">弃牌</button>';
   bar.innerHTML = html;
