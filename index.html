@@ -2141,9 +2141,11 @@ function renderTableChips(){
   }
 
   var bs = boardSize();
-  /* 数量、尺寸都对得上就不重建 —— 这是之前卡顿的根源 */
-  if (el._w === bs.w && el._h === bs.h && el.childElementCount === G.tableChips.length){
+  /* 已经在桌上的筹码一律不动：只有「数据和 DOM 对不上」时才补建，
+     不再因为窗口尺寸变化去重排 —— 那正是「筹码停一下又飞走」的来源 */
+  if (el.childElementCount === G.tableChips.length){
     el.classList.add('on');
+    G.chipDrawn = G.tableChips.length;
     return;
   }
   el._w = bs.w; el._h = bs.h;
@@ -2688,7 +2690,7 @@ function renderActions(){
     if (others.length === 1){ playerAct(actCompare, p, others[0]); }
     else { G.compareMode = true; render(); }
   };
-  $('#aFold').onclick = function(){ playerAct(actFold, p); };
+  if ($('#aFold')) $('#aFold').onclick = function(){ playerAct(actFold, p); };
 }
 
 function render(){
