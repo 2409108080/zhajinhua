@@ -232,7 +232,10 @@
     contain:layout style;
     transform:translateY(40px);
   }
-  .chip-pile.on{opacity:1;}
+  /* transition 取的是「变化之后」那一份样式：放在 .on 上是 none，
+     所以第一枚筹码落桌时筹码堆瞬间点亮，不会先消失再 200ms 淡回来
+     （那正是「到桌面闪一下」）；而摘掉 .on 收筹码时仍按基础规则淡出 */
+  .chip-pile.on{opacity:1;transition:none;}
 
   .chip{
     position:absolute;left:50%;top:50%;width:42px;height:42px;border-radius:50%;
@@ -313,24 +316,23 @@
     100%{opacity:1;transform:translate(var(--tx), var(--ty)) scale(1) rotate(0deg);}
   }
 
-  /* 甩出的筹码：只在飞行期间挂上，阴影减到最轻、走合成层 */
+  /* 甩出的筹码：只在飞行期间挂上，阴影减到最轻、走合成层。
+     轨迹就是一条直线：从座位直接推到落点，落地即停。
+     注意别在中途再加 transform 关键帧 —— CSS 的 animation-timing-function
+     是逐段生效的，中途插一个关键帧等于让速度归零后重新起步，
+     那就是之前「停一下又被弹走」的来源。 */
   .fx .chip.fly{
-    animation:chipToss 560ms cubic-bezier(.22,.72,.3,1) both;
+    animation:chipPush 560ms cubic-bezier(.2,.75,.3,1) both;
     box-shadow:0 2px 3px rgba(0,0,0,.45);
     will-change:transform,opacity;
   }
   .fx .chip.fly::before{
     box-shadow:0 0 0 1px var(--chip-rim);
   }
-  @keyframes chipToss{
-    0%   {opacity:0;transform:translate(-50%,-50%) translate3d(0,0,0) scale(.94) rotate(calc(var(--rot,0deg) - 120deg));}
-    18%  {opacity:1;}
-    /* 中途抛高一点，像被甩出去（中点由脚本算好，避免每帧解析 calc）；
-       不再做缩放弹跳，落地就是最终大小 */
-    55%  {transform:translate(-50%,-50%)
-            translate3d(var(--mx,0px), var(--my,0px), 0)
-            scale(1) rotate(calc(var(--rot,0deg) - 45deg));}
-    100% {opacity:1;transform:translate(-50%,-50%) translate3d(var(--dx,0px), var(--dy,0px), 0) scale(1) rotate(var(--rot,0deg));}
+  @keyframes chipPush{
+    0%   {opacity:0;transform:translate(-50%,-50%) translate3d(0,0,0) rotate(calc(var(--rot,0deg) - 40deg));}
+    16%  {opacity:1;}
+    100% {opacity:1;transform:translate(-50%,-50%) translate3d(var(--dx,0px), var(--dy,0px), 0) rotate(var(--rot,0deg));}
   }
 
   /* 赢家收筹码：桌面上的筹码被一个个吸进赢家座位 */
@@ -2172,12 +2174,12 @@ function addTableChip(v, spot, liveEl){
   }
   var node;
   if (liveEl){
-    /* 飞行中的那枚直接「转正」当成桌上的筹码：不删了重建，视觉上就不会闪一下 */
+    /* 飞行中的那枚直接「转正」当成桌上的筹码：不删了重建，视觉上就不会闪一下。
+       去掉 fly 就把动画撤掉，交还给静态的 --dx/--dy 定位 —— 动画终点
+       和落点是同一组坐标，所以不会看到回跳 */
     liveEl.classList.remove('fly');
     liveEl.style.left = '';
     liveEl.style.top = '';
-    liveEl.style.removeProperty('--mx');
-    liveEl.style.removeProperty('--my');
     liveEl.style.setProperty('--dx', spot.dx.toFixed(1) + 'px');
     liveEl.style.setProperty('--dy', spot.dy.toFixed(1) + 'px');
     liveEl.style.zIndex = 100 + idx;
@@ -2186,7 +2188,7 @@ function addTableChip(v, spot, liveEl){
     node = makeChipEl(v, chipClass(v), spot, idx);
   }
   el.appendChild(node);
-  el.classList.add('on');
+  el.classList.add('on');          /* .on 上 transition:none：落桌这一下直接亮，不淡入 */
   G.chipDrawn = G.tableChips.length;
 }
 
@@ -2247,9 +2249,6 @@ function flyChips(p, amount, startIdx){
       c.style.top  = sy + 'px';
       c.style.setProperty('--dx', (tx - sx).toFixed(1) + 'px');
       c.style.setProperty('--dy', (ty - sy).toFixed(1) + 'px');
-      /* 中点预算好：0.62 处再往上抛 44px，省掉每帧的 calc 解析 */
-      c.style.setProperty('--mx', ((tx - sx) * 0.62).toFixed(1) + 'px');
-      c.style.setProperty('--my', ((ty - sy) * 0.62 - 44).toFixed(1) + 'px');
       c.style.setProperty('--rot', spot.rot + 'deg');
       c.style.animationDelay = (i * GAP) + 'ms';
       layer.appendChild(c);
