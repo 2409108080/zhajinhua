@@ -1196,7 +1196,7 @@
         <li><b>闷牌</b>（还没看牌）时每次跟注付 <b>1 倍</b>注额；<b>看牌</b>之后每次跟注付 <b>2 倍</b>注额。<b>闷牌期间不能弃牌</b>——想跑就先看牌，看完再决定。</li>
         <li><b>加注</b>：把注额提到下一档（10 → 20 → 30 → 50 → 80 → 120 → 200 → 300），加注方按新注额付钱（闷牌 1 倍 / 看牌 2 倍）。</li>
         <li><b>比牌</b>：付「跟注额的 2 倍」作为比牌费用，指定一名对手亮牌比大小，输的人直接出局。<b>比牌平局时，发起比牌的一方判负。</b></li>
-        <li><b>闷牌与比牌</b>：只要这局你还没看牌，比牌时<b>两边都不亮牌</b>——不管是你比对手，还是对手比你，桌上只有两个牌背撞一下。亮一边也不行：就算你赢了，也能从对方那手反推出自己大概是什么牌。这局结束同样不给你复盘（座位写「闷牌到底」），想看牌就点【看牌】，此后的比牌才正常亮牌。</li>
+        <li><b>闷牌与比牌</b>：只要这局你还没看牌，比牌时<b>两边都不亮牌</b>——不管是你比对手，还是对手比你，桌上只有两个牌背撞一下。亮一边也不行：就算你赢了，也能从对方那手反推出自己大概是什么牌。本局打完后，结算会把你这三张翻开告诉你，当场不给看而已。</li>
         <li><b>弃牌</b>：<b>看过牌之后才能弃牌</b>，放弃本局，已经投进去的筹码不退。</li>
         <li>当只剩一名玩家没弃牌时，该玩家赢下全部底池。</li>
         <li><b>最后一轮抬档</b>：打到最后一轮时注额自动往上抬一档，想跟就得掂量掂量。</li>
@@ -2822,8 +2822,7 @@ function seatPositions(n){
 
 function seatHTML(p, x, y){
   var active = (G.phase === 'betting') && (G.turn === p.id) && isActive(p);
-  /* 玩家自己这手没看牌，摊牌时也不给自己翻 —— 闷就闷到底，看了等于白闷 */
-  var reveal = p.isHuman ? p.seen : (G.revealedAll || p.revealed);
+  var reveal = p.isHuman ? (p.seen || G.revealedAll) : (G.revealedAll || p.revealed);
   var isWinner = G.result && G.result.winnerIds.indexOf(p.id) >= 0;
 
   var noDeal = !!(G.result && (!G.result.winnerIds || G.result.winnerIds.length === 0));
@@ -2831,9 +2830,8 @@ function seatHTML(p, x, y){
 
   var stateTxt = !onTable ? '未上桌'
                : p.folded ? '已弃牌'
-               /* 摊牌后面向玩家的是明牌，再写「闷牌」就跟看到的牌自相矛盾；
-                  自己没看牌的那局不会翻，就一直写着「闷牌到底」 */
-               : (G.phase === 'over') ? (reveal ? '已摊牌' : '闷牌到底')
+               /* 摊牌后面向玩家的是明牌，再写「闷牌」就跟看到的牌自相矛盾 */
+               : (G.phase === 'over') ? '已摊牌'
                : p.allIn  ? '全下'
                : p.seen   ? '已看牌' : '闷牌';
   if (active && p.thinking) stateTxt = '思考中…';
@@ -2922,10 +2920,7 @@ function renderResult(){
       mid = '未上桌 · 筹码不足 ' + CONFIG.ante;
     } else {
       var h = handOf(p);
-      if (p.isHuman && !p.seen){
-        /* 这局从头闷到尾：结算也不给复盘，不然「闷牌」就只是个摆设 */
-        mid = (p.folded ? '已弃牌 · ' : '') + '闷牌到底，没看牌';
-      } else if (p.folded){
+      if (p.folded){
         var cs = h.cards.slice().sort(function(a,b){ return b.r - a.r; })
                          .map(function(c){ return RANK_TEXT[c.r] + c.sym; }).join(' ');
         mid = '已弃牌 · ' + (h.special235 ? '235' : h.name) + ' ' + cs;
@@ -2948,10 +2943,8 @@ function renderResult(){
     var w = G.players[G.result.winnerIds[0]];
     var wh = w ? handOf(w) : null;
     if (wh && !w.out){
-      /* 闷牌闷赢的那局也别把牌型念出来 */
-      var wtxt = (w.isHuman && !w.seen) ? '闷牌到底' : handText(wh);
       hero = '<div class="result-hero">' +
-               '<span class="hero-hand">' + wtxt + '</span>' +
+               '<span class="hero-hand">' + handText(wh) + '</span>' +
                '<span class="hero-gain">+' + w.won + '</span>' +
              '</div>';
     }
