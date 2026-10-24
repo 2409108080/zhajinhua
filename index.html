@@ -1196,6 +1196,7 @@
         <li><b>闷牌</b>（还没看牌）时每次跟注付 <b>1 倍</b>注额；<b>看牌</b>之后每次跟注付 <b>2 倍</b>注额。<b>闷牌期间不能弃牌</b>——想跑就先看牌，看完再决定。</li>
         <li><b>加注</b>：把注额提到下一档（10 → 20 → 30 → 50 → 80 → 120 → 200 → 300），加注方按新注额付钱（闷牌 1 倍 / 看牌 2 倍）。</li>
         <li><b>比牌</b>：付「跟注额的 2 倍」作为比牌费用，指定一名对手亮牌比大小，输的人直接出局。<b>比牌平局时，发起比牌的一方判负。</b></li>
+        <li><b>闷牌被比牌</b>：你还没看牌就被人要求比牌，桌上只翻开对方的牌，<b>你自己那三张始终扣着</b>——这局结束也不给你看，闷就要闷到底，不然「闷牌」等于免费看牌。</li>
         <li><b>弃牌</b>：<b>看过牌之后才能弃牌</b>，放弃本局，已经投进去的筹码不退。</li>
         <li>当只剩一名玩家没弃牌时，该玩家赢下全部底池。</li>
         <li><b>最后一轮抬档</b>：打到最后一轮时注额自动往上抬一档，想跟就得掂量掂量。</li>
@@ -1829,17 +1830,29 @@ function actCompare(p, target){
   var ha = handOf(p);
   var hb = handOf(target);
 
-  /* 闷牌比牌：双方都不亮牌 —— 不然从输赢就能反推出自己牌的大小
-     两个电脑互相比牌时，你（玩家）也不该看到他俩的牌 */
-  var show = !!p.seen && (p.isHuman || target.isHuman);
-  if (show){ p.revealed = true; target.revealed = true; }
+  /* 亮牌怎么算：
+     · 两个电脑互相比 —— 谁都不亮，你也不该看到他俩的牌
+     · 我还在闷牌 —— 只亮对手那三张，自己这三张照旧盖着
+       （一亮就等于把「闷牌比牌」变成了免费看牌，风险全没了）
+     · 我早就看过牌了 —— 两边都亮，正常对决 */
+  var human   = p.isHuman ? p : (target.isHuman ? target : null);
+  var foe     = human ? (human === p ? target : p) : null;
+  var showMe  = !!(human && human.seen);
+  var showFoe = !!human && (human.seen || !!foe.seen);
+  var showP   = human ? (p === human ? showMe : showFoe) : false;
+  var showT   = human ? (target === human ? showMe : showFoe) : false;
+  if (showP) p.revealed = true;
+  if (showT) target.revealed = true;
 
-  log(p.name + ' 花 ' + paid + ' 要求与 ' + target.name + ' 比牌' +
-      (show ? '' : '（闷牌比牌，双方不见牌）'));
+  var note = '';
+  if (!showP && !showT) note = '（闷牌比牌，双方不见牌）';
+  else if (human && !human.seen) note = '（你还在闷牌，只看对手的牌）';
+
+  log(p.name + ' 花 ' + paid + ' 要求与 ' + target.name + ' 比牌' + note);
   G.animating = true;
   render();
 
-  playCompare(p, target, show, function(){
+  playCompare(p, target, { p: showP, t: showT }, function(){
     G.animating = false;
     var r = compareHands(ha, hb);
     if (r > 0){
@@ -1860,13 +1873,14 @@ function actCompare(p, target){
   return true;    // afterAction 由动画回调负责
 }
 
-/* 比牌动画：看过牌 → 两家的牌飞到中央亮出对决；闷牌 → 只撞一下牌背 */
-function playCompare(p, target, show, done){
+/* 比牌动画：看过牌 → 两家的牌飞到中央亮出对决；闷牌 → 只撞一下牌背
+   vis 是两边各自亮不亮：{ p: 发起方, t: 被比的一方 } */
+function playCompare(p, target, vis, done){
   SFX.play('compare');
   var layer = document.getElementById('fx');
   if (!layer || !motionOK()){ done(); return; }
 
-  if (!show){
+  if (!vis.p && !vis.t){
     var cl = document.createElement('div');
     cl.className = 'cmp-clash';
     cl.innerHTML =
@@ -1885,15 +1899,17 @@ function playCompare(p, target, show, done){
 
   var stage = document.createElement('div');
   stage.className = 'cmp-stage';
-  function sideHTML(pl){
+  function sideHTML(pl, showCards){
     var h = '<div class="cmp-name">' + pl.name + '</div><div class="cmp-cards">';
-    for (var i = 0; i < 3; i++) h += cardHTML(pl.cards[i], false);
+    for (var i = 0; i < 3; i++){
+      h += showCards ? cardHTML(pl.cards[i], false) : '<div class="card back"></div>';
+    }
     return h + '</div>';
   }
   stage.innerHTML =
-    '<div class="cmp-side l" id="cmpL">' + sideHTML(p) + '</div>' +
+    '<div class="cmp-side l" id="cmpL">' + sideHTML(p, vis.p) + '</div>' +
     '<div class="cmp-vs">比</div>' +
-    '<div class="cmp-side r" id="cmpR">' + sideHTML(target) + '</div>';
+    '<div class="cmp-side r" id="cmpR">' + sideHTML(target, vis.t) + '</div>';
   layer.appendChild(stage);
 
   setTimeout(function(){
@@ -2817,7 +2833,8 @@ function seatPositions(n){
 
 function seatHTML(p, x, y){
   var active = (G.phase === 'betting') && (G.turn === p.id) && isActive(p);
-  var reveal = p.isHuman ? (p.seen || G.revealedAll) : (G.revealedAll || p.revealed);
+  /* 玩家自己这手没看牌，摊牌时也不给自己翻 —— 闷就闷到底，看了等于白闷 */
+  var reveal = p.isHuman ? p.seen : (G.revealedAll || p.revealed);
   var isWinner = G.result && G.result.winnerIds.indexOf(p.id) >= 0;
 
   var noDeal = !!(G.result && (!G.result.winnerIds || G.result.winnerIds.length === 0));
@@ -2825,8 +2842,9 @@ function seatHTML(p, x, y){
 
   var stateTxt = !onTable ? '未上桌'
                : p.folded ? '已弃牌'
-               /* 摊牌后面向玩家的是明牌，再写「闷牌」就跟看到的牌自相矛盾 */
-               : (G.phase === 'over') ? '已摊牌'
+               /* 摊牌后面向玩家的是明牌，再写「闷牌」就跟看到的牌自相矛盾；
+                  自己没看牌的那局不会翻，就一直写着「闷牌到底」 */
+               : (G.phase === 'over') ? (reveal ? '已摊牌' : '闷牌到底')
                : p.allIn  ? '全下'
                : p.seen   ? '已看牌' : '闷牌';
   if (active && p.thinking) stateTxt = '思考中…';
@@ -2915,7 +2933,10 @@ function renderResult(){
       mid = '未上桌 · 筹码不足 ' + CONFIG.ante;
     } else {
       var h = handOf(p);
-      if (p.folded){
+      if (p.isHuman && !p.seen){
+        /* 这局从头闷到尾：结算也不给复盘，不然「闷牌」就只是个摆设 */
+        mid = (p.folded ? '已弃牌 · ' : '') + '闷牌到底，没看牌';
+      } else if (p.folded){
         var cs = h.cards.slice().sort(function(a,b){ return b.r - a.r; })
                          .map(function(c){ return RANK_TEXT[c.r] + c.sym; }).join(' ');
         mid = '已弃牌 · ' + (h.special235 ? '235' : h.name) + ' ' + cs;
@@ -2938,8 +2959,10 @@ function renderResult(){
     var w = G.players[G.result.winnerIds[0]];
     var wh = w ? handOf(w) : null;
     if (wh && !w.out){
+      /* 闷牌闷赢的那局也别把牌型念出来 */
+      var wtxt = (w.isHuman && !w.seen) ? '闷牌到底' : handText(wh);
       hero = '<div class="result-hero">' +
-               '<span class="hero-hand">' + handText(wh) + '</span>' +
+               '<span class="hero-hand">' + wtxt + '</span>' +
                '<span class="hero-gain">+' + w.won + '</span>' +
              '</div>';
     }
