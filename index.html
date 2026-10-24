@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>炸金花 · 单机版（纯娱乐）</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#0b1611">
 <style>
   /* ==========================================================================
      炸金花 · 视觉系统
@@ -951,6 +953,14 @@
   }
   @media (max-height:640px){
     .seat-opp{width:96px;}
+    /* 矮屏放 5 家时，顶上两个和两侧的座位上下会叠在一起（320x568 实测垂直重叠 15px）。
+       光调水平间距没用，得把座位本身收小一圈 */
+    #seats.many .seat-opp{width:74px;padding:3px 2px;}
+    #seats.many .seat-opp .avatar{width:17px;height:17px;font-size:8px;margin-bottom:2px;}
+    #seats.many .seat-opp .seat-name{font-size:9px;}
+    #seats.many .seat-opp .seat-chips{font-size:9.5px;}
+    #seats.many .seat-opp .seat-state{font-size:7.5px;}
+    #seats.many .card.small{width:15px;height:22px;}
     .avatar{width:34px;height:34px;font-size:13px;}
     .seat-me .avatar{width:38px;height:38px;font-size:15px;}
     .card.small{width:22px;height:31px;}
@@ -1283,8 +1293,11 @@ function handStrength(h){
   switch (h.type){
     case HAND.TRIPS:          return 0.97;
     case HAND.STRAIGHT_FLUSH: return 0.93;
-    case HAND.FLUSH:          return 0.72 + (h.keys[0] - 5) / 60;   // 金花 A高 ≈0.87
-    case HAND.STRAIGHT:       return 0.66 + (h.keys[0] - 3) / 60;
+    /* 金花 / 顺子各自 11 个档位，区间必须互不重叠，且金花整体压过顺子。
+       斜率收到 /125 后：顺子 0.668~0.748，金花 0.772~0.852 —— 金花上限刚好
+       卡在下面 0.86 的「怪兽牌」阈值之外，A 高金花不会再被当成豹子打 */
+    case HAND.FLUSH:          return 0.78 + (h.keys[0] - 5) / 125;   // 234金花 ≈0.77，A高 ≈0.85
+    case HAND.STRAIGHT:       return 0.66 + (h.keys[0] - 3) / 125;   // 234顺 ≈0.67，AKQ ≈0.75
     case HAND.PAIR:           return 0.42 + (h.keys[0] - 2) / 50;   // 对A ≈0.66
     default:                  return 0.06 + (h.keys[0] - 2) / 45;   // 单张A高 ≈0.33
   }
@@ -1382,6 +1395,7 @@ function startHand(){
     q.callCount = 0;
     q.blindCalls = 0;
     q.thinking = false;
+    q.acted = false;        // 本局这一轮是否已经动过（算轮次用）
   }
 
   var able = G.players.filter(function(x){ return !x.out; });
@@ -1626,8 +1640,18 @@ function nextActiveSeat(from){
 function afterAction(){
   if (G.phase !== 'betting') return;
 
+  /* 轮次口径：一「轮」= 所有还能做决定的人各行动过一次。
+     以前按「总人数」硬除，一旦有人弃牌或全下，轮次就被拖慢，
+     6 轮上限几乎撞不到（5 人桌实测触发率 0.05%）。 */
+  var mover = G.players[G.turn];
+  if (mover) mover.acted = true;
+
   G.actionCount++;
-  G.round = Math.floor(G.actionCount / G.players.length) + 1;
+  var actors = G.players.filter(isActive);
+  if (actors.length && actors.every(function(x){ return x.acted; })){
+    G.round++;
+    G.players.forEach(function(x){ x.acted = false; });
+  }
 
   var alive = G.players.filter(inHand);
   if (alive.length === 1){ settle([alive[0]], '其余玩家全部弃牌'); return; }
@@ -2465,7 +2489,9 @@ var SEAT_LAYOUT = {
     2: [[50, 85], [50, 15]],
     3: [[50, 85], [27, 26], [73, 26]],
     4: [[50, 85], [19, 34], [50, 15], [81, 34]],
-    5: [[50, 85], [16, 34], [36, 15], [64, 15], [84, 34]]
+    /* 顶上两家原来挤在 36/64，320px 窄屏只隔 84px、座位本身 82px，会蹭到一起，
+       拉到 34/66 留出余量 */
+    5: [[50, 85], [16, 34], [34, 15], [66, 15], [84, 34]]
   }
 };
 
@@ -2899,6 +2925,13 @@ function runSelfTests(){
     handStrength(ev([['A','♠'],['K','♠'],['9','♠']])) > handStrength(ev([['A','♠'],['K','♥'],['Q','♣']])) &&
     handStrength(ev([['A','♠'],['K','♥'],['Q','♣']])) > handStrength(ev([['9','♠'],['9','♥'],['K','♦']])) &&
     handStrength(ev([['9','♠'],['9','♥'],['K','♦']])) > handStrength(ev([['A','♠'],['9','♥'],['4','♣']])));
+
+  /* 9b. 金花与顺子的评分区间不能串档（串了 AI 会高估顺子、低估金花） */
+  t('牌力评分：最小金花 > 最大顺子',
+    handStrength(ev([['2','♠'],['3','♠'],['5','♠']])) > handStrength(ev([['A','♥'],['K','♣'],['Q','♦']])));
+  /* 9c. 金花不能顶到 0.86 以上，否则 A 高金花会被当成豹子级乱比牌 */
+  t('牌力评分：A高金花低于怪兽牌阈值 0.86',
+    handStrength(ev([['A','♠'],['K','♠'],['9','♠']])) < 0.86);
 
   /* 10. 边池：全下（投入少）的玩家只能赢自己投入对应的那一层 */
   (function(){
