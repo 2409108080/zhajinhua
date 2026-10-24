@@ -1997,7 +1997,7 @@ function afterAction(){
     /* 摊牌原因带上名字：不然玩家只看到「突然结算」，不知道是谁把钱压光了 */
     var allin = G.players.filter(function(x){ return inHand(x) && x.allIn; });
     var who = allin.map(function(x){ return x.name; }).join('、');
-    forcedShowdown(who ? who + ' 全下，没人能再加注' : '没人可以继续加注');
+    forcedShowdown(who ? who + ' 全下' : '没人可以继续加注');
     return;
   }
   if (G.round > CONFIG.maxRounds){ forcedShowdown('已达 ' + CONFIG.maxRounds + ' 轮上限'); return; }
