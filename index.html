@@ -708,6 +708,31 @@
     .guide-foot button{width:100%;padding:8px 12px;font-size:12px;}
   }
 
+  /* 强制摊牌的过场：牌翻开、钱还没收走的时候先亮一句「摊牌」，
+     不然桌上一闪就弹出结算面板，玩家会觉得「我还在玩，怎么突然判了别人赢」 */
+  .sd-flash{
+    position:absolute;left:50%;top:15%;transform:translate(-50%,-50%);
+    z-index:8;display:flex;align-items:center;justify-content:center;
+    flex-wrap:wrap;gap:6px 9px;
+    box-sizing:border-box;width:max-content;max-width:calc(100% - 30px);
+    padding:7px 15px 8px;border-radius:14px;pointer-events:none;
+    background:linear-gradient(180deg, rgba(24,42,33,.95), rgba(9,19,15,.96));
+    border:1px solid rgba(232,182,76,.45);
+    box-shadow:0 14px 32px rgba(0,0,0,.5), 0 1px 0 rgba(255,255,255,.06) inset;
+    animation:sdIn 200ms ease-out both;
+  }
+  .sd-flash[hidden]{display:none;}
+  .sd-flash b{
+    font-size:12.5px;font-weight:800;letter-spacing:.22em;text-indent:.22em;
+    color:var(--gold-hi);white-space:nowrap;
+  }
+  .sd-flash span{
+    font-size:11px;line-height:1.45;color:#a9b3aa;text-align:center;
+    letter-spacing:.01em;
+  }
+  @keyframes sdIn{from{opacity:0;transform:translate(-50%,-50%) scale(.92);}
+                  to{opacity:1;transform:translate(-50%,-50%) scale(1);}}
+
   .result{display:none;}
   .result.show{
     display:block;
@@ -764,6 +789,16 @@
     margin-bottom:9px;display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;
   }
   .result-title span{font-weight:400;font-size:11.5px;color:var(--muted);letter-spacing:0;}
+  /* 「这局怎么结束的」小字：结算面板必须交代一句，
+     否则闷牌跟到底被摊牌收场，看起来就像系统自己判了个赢家 */
+  .result-why{
+    margin:-4px 0 8px;font-size:11px;line-height:1.45;color:#93a09a;
+    letter-spacing:.01em;
+  }
+  .result-why::before{
+    content:"";display:inline-block;width:5px;height:5px;margin-right:6px;
+    border-radius:50%;background:rgba(232,182,76,.7);vertical-align:1.5px;
+  }
   .rrow{
     display:flex;align-items:center;gap:10px;font-size:12.5px;padding:5px 0;
     color:var(--muted);border-top:1px solid rgba(255,255,255,.05);
@@ -1090,6 +1125,8 @@
     .chip-pile{transform:translateY(30px);}
     .chip{width:30px;height:30px;font-size:10px;}
     .log{max-height:44px;}
+    /* 矮屏上顶栏更靠下，摊牌横幅得让开，不然压在【设置】【规则】上 */
+    .sd-flash{top:20%;}
   }
 
   @media (prefers-reduced-motion:reduce){
@@ -1119,6 +1156,9 @@
       <div class="pot-num" id="potMain">0</div>
       <div class="pot-sub"><span id="unitMain">注额 10</span><i>·</i><span id="roundMain">第 1/6 轮</span></div>
     </div>
+
+    <!-- 强制摊牌的过场：先把各家的牌翻开亮一下，再弹结算面板 -->
+    <div class="sd-flash" id="sdFlash" hidden><b>摊 牌</b><span></span></div>
 
     <div id="seats"></div>
 
@@ -1953,7 +1993,13 @@ function afterAction(){
   if (alive.length === 1){ settle([alive[0]], '其余玩家全部弃牌'); return; }
 
   var active = G.players.filter(isActive);
-  if (active.length <= 1){ forcedShowdown('有人全下，剩下的人没法再加注'); return; }
+  if (active.length <= 1){
+    /* 摊牌原因带上名字：不然玩家只看到「突然结算」，不知道是谁把钱压光了 */
+    var allin = G.players.filter(function(x){ return inHand(x) && x.allIn; });
+    var who = allin.map(function(x){ return x.name; }).join('、');
+    forcedShowdown(who ? who + ' 全下，没人能再加注' : '没人可以继续加注');
+    return;
+  }
   if (G.round > CONFIG.maxRounds){ forcedShowdown('已达 ' + CONFIG.maxRounds + ' 轮上限'); return; }
 
   var ns = nextActiveSeat(G.turn);
@@ -2172,7 +2218,10 @@ function localDecide(p){
            + (endgame ? 0.16 : 0)
            + (G.round >= 2 ? (CONFIG.compareRamp || 0) * (G.round - 1) : 0)
            + (s > 0.70 ? 0.10 : 0)
-           + (anyBlind ? 0.10 : 0);      // 欺负看不见牌的
+           /* 桌上还有闷牌的：比牌是最便宜的收口方式。
+              最后两轮再加一档，否则双方一路跟注到轮数上限被动摊牌，
+              闷牌玩家的体感就是「我还在玩，怎么突然结束了」 */
+           + (anyBlind ? (G.round >= CONFIG.maxRounds - 1 ? 0.30 : 0.10) : 0);
   if (Math.random() < cmpP){
     /* 优先比闷牌的（他连自己什么牌都不知道，最容易赢） */
     var pool = others.filter(function(x){ return !x.seen; });
@@ -2246,6 +2295,18 @@ function buildPots(){
   return pots;
 }
 
+/* 「这局为什么结束」说人话：显示在结算面板标题下面。
+   没有这句话，闷牌跟到底被强制摊牌收场，看起来就像系统自己判了个赢家。 */
+function endReasonText(reason){
+  if (!reason) return '';
+  if (reason.indexOf('弃牌') >= 0)      return '其余玩家全部弃牌';
+  if (reason.indexOf('轮上限') >= 0)    return '没人要求比牌，打到 ' + CONFIG.maxRounds + ' 轮上限，摊牌比大小';
+  if (reason.indexOf('全下') >= 0)      return reason + '，摊牌比大小';
+  if (reason.indexOf('无人可以继续') >= 0) return '没人还能继续下注，摊牌比大小';
+  if (reason.indexOf('没人可以继续') >= 0) return '没人能继续加注，摊牌比大小';
+  return reason;
+}
+
 function settle(winners, reason){
   if (G.aiTimer){ clearTimeout(G.aiTimer); G.aiTimer = null; }
   hidePerTip();
@@ -2277,15 +2338,18 @@ function settle(winners, reason){
     });
   }
 
-  var names, subtitle;
+  var names, subtitle, why, showdown = false;
   if (winners && winners.length >= inHandPs.length){
     /* 其他人全弃了：剩下的人直接通吃整个底池（含别人多投的部分，这是弃牌该付的代价） */
     award(winners, pot, '底池');
     names = realWinners.map(function(w){ return w.name; }).join('、');
     subtitle = reason + '，赢得底池 ' + pot;
+    why = '其余玩家全部弃牌';
     log('本局结束：' + names + ' 赢得底池 ' + pot + '（' + reason + '）');
   } else {
     /* 摊牌结算：按投入切主池/边池，每池单独比牌 */
+    showdown = true;
+    why = endReasonText(reason);
     var pots = buildPots();
     pots.forEach(function(bp, i){
       var label = i === 0 ? '主池' : '边池' + i;
@@ -2314,6 +2378,9 @@ function settle(winners, reason){
 
   G.result = {
     reason: reason,
+    why: why,                       // 结算面板上那句「怎么结束的」
+    showdown: showdown,             // 是不是摊牌收场
+    pending: showdown,              // 摊牌时先亮牌，稍后再弹面板
     pot: pot,
     winnerIds: realWinners.map(function(w){ return w.id; }),
     pots: potRows,
@@ -2322,6 +2389,17 @@ function settle(winners, reason){
   };
   G.turn = -1;
   render();
+
+  /* 摊牌过场：各家牌先翻过来亮 850ms，再让结算面板盖上来。
+     不然牌一翻面板同时糊上去，玩家根本看不出这是「摊牌比大小」。 */
+  if (showdown){
+    var res = G.result;
+    setTimeout(function(){
+      if (G.result !== res || G.phase !== 'over') return;
+      res.pending = false;
+      render();
+    }, 850);
+  }
 }
 
 function forcedShowdown(reason){
@@ -2903,7 +2981,23 @@ function renderSeats(){
 function renderResult(){
   var el = $('#result');
   if (!el) return;
-  if (G.phase !== 'over' || !G.result){ el.className = 'result'; el.innerHTML = ''; return; }
+  var flash = document.getElementById('sdFlash');
+  if (G.phase !== 'over' || !G.result){
+    el.className = 'result'; el.innerHTML = '';
+    if (flash) flash.hidden = true;
+    return;
+  }
+
+  /* 摊牌过场：牌已经翻开，结算面板晚一步再上来 */
+  if (flash){
+    flash.hidden = !G.result.pending;
+    if (G.result.pending){
+      var sp = flash.querySelector('span');
+      if (sp) sp.textContent = G.result.why || '';
+    }
+  }
+  if (G.result.pending){ el.className = 'result'; el.innerHTML = ''; return; }
+
   el.className = 'result show';
 
   /* 这局根本没发牌（筹码不足凑不齐人），只显示原因，不列牌 */
@@ -2951,9 +3045,13 @@ function renderResult(){
   }
   /* 单人单池时抬头已经把牌型和收益说完了，副标题不用再念一遍 */
   var showSub = !(G.result.winnerIds.length === 1 && pots.length <= 1);
+  /* 副标题里已经写了「其余玩家全部弃牌」就别再重复一行；
+     摊牌收场则必须留这句，不然玩家不知道这局为什么会结束 */
+  var showWhy = !!G.result.why && (G.result.showdown || !showSub);
 
   el.innerHTML = '<div class="result-title">' + G.result.title +
                  (showSub ? '<span>' + G.result.subtitle + '</span>' : '') + '</div>' +
+                 (showWhy ? '<div class="result-why">' + G.result.why + '</div>' : '') +
                  hero + rows;
 }
 
@@ -2963,6 +3061,11 @@ function renderActions(){
 
   /* 局已结束 */
   if (G.phase === 'over'){
+    /* 摊牌过场还没走完：先别给「下一局」，免得点到一半面板又弹出来 */
+    if (G.result && G.result.pending){
+      bar.innerHTML = '<div class="wait"><span class="dot"></span>摊牌比大小…</div>';
+      return;
+    }
     var ableCount = G.players.filter(function(x){ return x.chips >= CONFIG.ante; }).length;
     if (ableCount < 2 || G.players[0].chips < CONFIG.ante){
       /* 凑不齐一桌：原因写在结算面板里，这里只留按钮 */
