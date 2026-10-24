@@ -614,9 +614,48 @@
   }
   .action-dock > *{pointer-events:auto;}
 
+  /* ---------------------- 首次进入：轻触开始 ---------------------- */
+  /* 没手势就不许出声，所以先摆空桌，点一下再发牌 */
+  #board.prestart .board-center{opacity:0;transition:opacity var(--dur-base) var(--ease);}
+
+  .tap-start{
+    position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:11;
+    display:none;flex-direction:column;align-items:center;gap:11px;
+    padding:0;border:0;background:none;cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .tap-start.show{display:flex;}
+  .tap-start i{
+    position:relative;width:74px;height:74px;border-radius:50%;
+    background:radial-gradient(circle at 50% 34%, rgba(232,182,76,.30), rgba(232,182,76,.04) 72%);
+    border:1px solid rgba(232,182,76,.52);
+    box-shadow:0 0 0 0 rgba(232,182,76,.34), 0 12px 30px rgba(0,0,0,.45);
+    animation:tapPulse 2.4s var(--ease) infinite;
+  }
+  .tap-start i::after{          /* 中间放一张牌背，暗示这是牌桌 */
+    content:"";position:absolute;left:50%;top:50%;width:26px;height:34px;
+    transform:translate(-50%,-50%) rotate(-8deg);border-radius:4px;
+    background:linear-gradient(160deg,#26507f,#16304d);
+    border:1px solid rgba(255,255,255,.26);
+    box-shadow:0 2px 6px rgba(0,0,0,.5);
+  }
+  .tap-start b{
+    font-family:var(--font-ui);font-size:14px;font-weight:800;letter-spacing:.16em;
+    color:var(--gold-hi);text-shadow:0 2px 10px rgba(0,0,0,.65);
+  }
+  .tap-start small{font-size:10.5px;letter-spacing:.1em;color:var(--dim);}
+  @keyframes tapPulse{
+    0%  {box-shadow:0 0 0 0 rgba(232,182,76,.34), 0 12px 30px rgba(0,0,0,.45);}
+    70% {box-shadow:0 0 0 15px rgba(232,182,76,0), 0 12px 30px rgba(0,0,0,.45);}
+    100%{box-shadow:0 0 0 0 rgba(232,182,76,0), 0 12px 30px rgba(0,0,0,.45);}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .tap-start i{animation:none;}
+  }
+
   /* ---------------------------- 首局引导 ---------------------------- */
   .guide{
-    position:absolute;left:12px;right:12px;top:70px;z-index:12;
+    position:absolute;left:12px;right:12px;top:92px;z-index:12;
     padding:12px 14px;border-radius:14px;
     background:linear-gradient(180deg, rgba(24,42,33,.98), rgba(10,22,17,.98));
     border:1px solid rgba(232,182,76,.34);
@@ -653,9 +692,14 @@
   }
   .guide-foot button:active{transform:translateY(1px);}
 
+  /* 宽屏下这张卡别拉满一整行，也别盖住顶栏的【设置】【规则】 */
+  @media (min-width:761px){
+    .guide{top:104px;max-width:520px;}
+  }
+
   /* 矮屏（320×568 这类）引导卡别铺满整张桌 */
   @media (max-height:640px){
-    .guide{top:62px;padding:10px 12px;}
+    .guide{top:84px;padding:10px 12px;}
     .guide-head{font-size:12px;margin-bottom:7px;}
     .guide li{font-size:11px;line-height:1.5;margin-bottom:5px;padding-left:19px;}
     .guide li::before{width:14px;height:14px;line-height:14px;font-size:9px;}
@@ -1061,6 +1105,13 @@
   <main class="board" id="board">
     <div class="felt"></div>
     <div class="felt-mark" aria-hidden="true">炸金花</div>
+
+    <!-- 首次进入先摆空桌：浏览器要求有用户手势才允许出声，点一下再发牌 -->
+    <button class="tap-start" id="tapStart" type="button" aria-label="轻触开始发牌">
+      <i aria-hidden="true"></i>
+      <b>轻触开始</b>
+      <small>点一下就发牌</small>
+    </button>
 
     <div class="board-center">
       <div class="chip-pile" id="chipPile"></div>
@@ -1532,7 +1583,33 @@ function inHand(p){ return !p.out && !p.folded; }          // 本局还在这把
 function isActive(p){ return inHand(p) && !p.allIn; }      // 还能做决定
 function log(msg){ G.logs.push(msg); }
 
+/* ============================================================================
+   首次进入：空桌等一次点击再发牌
+   浏览器规定「没有用户手势就不许出声」，boot 里直接发牌的话，第一次的发牌声
+   和下底注声都会被静音（AudioContext 还是 suspended）。所以把开局挂在第一次
+   手势上：点了才开始，第一局的声音就是全的。
+   ============================================================================ */
+var started = false;
+
+function startGame(){
+  if (started) return;
+
+  /* 引导卡还没关就直接开局了（点了中间那个按钮）：收掉它，别挡着对手 */
+  var g = document.getElementById('guide');
+  if (g && !g.hidden) closeGuide();
+
+  SFX.unlock();          // 趁还在手势里把 AudioContext 唤醒
+  initGame();
+}
+
 function initGame(){
+  /* 只要真的开了局（包括从设置面板改人数重开），就不该再摆「轻触开始」 */
+  started = true;
+  var bd = document.getElementById('board');
+  if (bd) bd.classList.remove('prestart');
+  var tp = document.getElementById('tapStart');
+  if (tp) tp.classList.remove('show');
+
   var n = Math.max(2, Math.min(5, (CONFIG.opponents || 2) + 1));
   G.players = [];
   for (var i = 0; i < n; i++){
@@ -3072,13 +3149,19 @@ function closeGuide(){
   var g = document.getElementById('guide');
   if (g) g.hidden = true;
   try { localStorage.setItem(GUIDE_KEY, '1'); } catch (e) {}
+  /* 关掉引导还没开局，把「轻触开始」还回去（矮屏上这两个会叠在一起） */
+  var t = document.getElementById('tapStart');
+  if (t && !started) t.classList.add('show');
 }
 function showGuideIfNew(){
   var seen = false;
   try { seen = !!localStorage.getItem(GUIDE_KEY); } catch (e) {}
-  if (seen) return;
+  if (seen || started) return;      // 已经开局了就别再盖上来，这张卡挡得住三个对手
   var g = document.getElementById('guide');
-  if (g) g.hidden = false;
+  if (!g) return;
+  g.hidden = false;
+  var t = document.getElementById('tapStart');
+  if (t) t.classList.remove('show');   // 有引导卡了，中间就别再放个按钮挤着
 }
 
 /* ============================================================================
@@ -3319,7 +3402,26 @@ function runSelfTests(){
     });
   }
 
-  initGame();
+  /* 开局：先摆一张空桌，等第一次手势再发牌（不然第一局的发牌声、底注声全哑） */
+  var bd = $('#board');
+  if (bd) bd.classList.add('prestart');
+  var tap = $('#tapStart');
+  if (tap){
+    tap.classList.add('show');
+    tap.onclick = startGame;
+  }
+
+  function firstGesture(e){
+    var n = e.target;
+    /* 点右上角【规则】【设置】不算开局，让人先把说明看完 */
+    if (n && n.closest && n.closest('#btnRules,#btnSettings,#modal,#settingsModal')) return;
+    document.removeEventListener('pointerdown', firstGesture, true);
+    document.removeEventListener('keydown', firstGesture, true);
+    startGame();
+  }
+  document.addEventListener('pointerdown', firstGesture, true);
+  document.addEventListener('keydown', firstGesture, true);
+
   watchDock();
   setTimeout(showGuideIfNew, 850);
 
