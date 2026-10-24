@@ -754,7 +754,7 @@
     border-radius:var(--r-lg);padding:13px 16px;
     /* 原来用 backdrop-filter 模糊桌面，低端安卓一开面板就掉帧；
        改成更实的渐变底色，观感一样，代价小得多 */
-    background:linear-gradient(180deg, rgba(26,42,34,.96), rgba(9,19,15,.97));
+    background:linear-gradient(180deg, rgba(26,42,34,.985), rgba(9,19,15,.99));
     border:1px solid rgba(232,182,76,.32);
     box-shadow:0 18px 44px rgba(0,0,0,.5), 0 1px 0 rgba(255,255,255,.07) inset;
   }
@@ -825,6 +825,14 @@
   .rrow .rdelta{
     font-family:var(--font-num);font-weight:800;font-size:13px;color:var(--gold);
     font-variant-numeric:tabular-nums;
+  }
+  /* 结算面板底部的操作行：跟着面板走，面板限高滚动时也钉在可视区底部，
+     这样矮屏上不用额外给按钮留一段空地 */
+  .result-acts{
+    margin:10px 0 0;padding-top:9px;
+    border-top:1px solid rgba(232,182,76,.16);
+    position:sticky;bottom:-13px;
+    background:linear-gradient(180deg, rgba(14,26,20,0), rgba(12,23,18,.98) 34%);
   }
 
   /* ---------------------------- 操作区 ---------------------------- */
@@ -1117,6 +1125,9 @@
     .seat-me .card .s{font-size:14px;}
     .log{max-height:58px;}
     .actions button{padding:11px 10px;font-size:13px;}
+    /* 结算面板要塞进「顶上一排对手」和「自己手牌」之间，差几个像素就会被迫滚动 */
+    .rrow{padding:4px 0;}
+    .result-acts{margin-top:8px;padding-top:7px;}
   }
   @media (max-height:640px){
     .seat-opp{width:96px;}
@@ -1140,6 +1151,48 @@
     .log{max-height:44px;}
     /* 矮屏上顶栏更靠下，摊牌横幅得让开，不然压在【设置】【规则】上 */
     .sd-flash{top:20%;}
+    /* 要给顶部那排对手腾地方，结算面板只能再紧凑一档，否则最后一行要滚动才看得到 */
+    .result{padding:8px 10px;}
+    .result-title{margin-bottom:5px;}
+    /* 抬头行和赢家那一行说的是同一件事（牌型 + 收益），矮屏上二选一 */
+    .result-hero{display:none;}
+    .result-why{margin:-1px 0 6px;font-size:10.5px;}
+    .rrow{padding:1px 0;font-size:10.5px;}
+    .rrow .rh{font-size:10px;}
+    .result-acts{margin-top:5px;padding-top:5px;}
+  }
+
+  /* ---------------- 结算态：对手收拢到顶部一行 ----------------
+     5 人桌中场那两家原本在 34% 高度，正好被结算面板盖住，复盘看不到他们的牌。
+     收成一排后牌桌中间空出来，面板才能和牌共存。
+     这几条优先级要压过上面所有 #seats.many 的规则，所以放在最后 */
+  #seats.settle.many .seat-opp{width:96px;}
+  #seats.settle.many .seat-opp .avatar{width:26px;height:26px;font-size:11px;margin-bottom:3px;}
+  #seats.settle.many .seat-opp .seat-name{font-size:10.5px;}
+  #seats.settle.many .seat-opp .seat-chips{font-size:10.5px;}
+  #seats.settle.many .seat-opp .seat-state{font-size:8px;line-height:1.3;}
+  #seats.settle.many .card.small{width:19px;height:27px;}
+  /* 结算态座位太窄，「赢」标签和牌型标签会把名字挤成省略号；
+     这两样面板里都写得很清楚，座位上不重复 */
+  #seats.settle .pill-win,
+  #seats.settle .seat-state .st{display:none;}
+
+  @media (max-width:560px){
+    #seats.settle.many .seat-opp{width:72px;padding:0 1px;}
+    #seats.settle.many .seat-opp .avatar{width:22px;height:22px;font-size:10px;margin-bottom:2px;}
+    #seats.settle.many .seat-opp .seat-name{font-size:9.5px;}
+    #seats.settle.many .seat-opp .seat-chips{font-size:9.5px;}
+    #seats.settle.many .seat-opp .seat-state{font-size:7.5px;}
+    #seats.settle.many .card.small{width:16px;height:23px;}
+    #seats.settle.many .card.small .r{font-size:8.5px;}
+    #seats.settle.many .card.small .s{font-size:7px;}
+  }
+  @media (max-height:640px){
+    #seats.settle.many .seat-opp{width:66px;}
+    #seats.settle.many .seat-opp .avatar{width:19px;height:19px;font-size:9px;margin-bottom:1px;}
+    #seats.settle.many .seat-opp .seat-name{font-size:9px;}
+    #seats.settle.many .seat-opp .seat-chips{font-size:9px;}
+    #seats.settle.many .card.small{width:15px;height:21px;}
   }
 
   @media (prefers-reduced-motion:reduce){
@@ -2917,6 +2970,22 @@ var SEAT_LAYOUT = {
 
 function seatPositions(n){
   var narrow = isNarrow();
+
+  /* 结算态：手机上对手全部收拢到顶部一行。
+     5 人桌的中场那两家（16%/84%,34%）正好落在结算面板底下，牌被整个盖住，
+     复盘时看不到他们是什么牌。挪到顶上一排，牌桌中间就空出来了。
+     电脑屏幕够大，座位不动更自然 */
+  if (narrow && G.phase === 'over' && G.result && n > 1){
+    var k = n - 1, row = [];
+    /* 矮屏顶栏占到 1/5，座位贴太高会被【设置】【规则】压住，往下让一档 */
+    var hangY = (typeof window !== 'undefined' && window.innerHeight < 640) ? 20 : 13;
+    for (var i = 0; i < k; i++){
+      row.push({ x: (k === 1) ? 50 : (i + 0.5) * (100 / k), y: hangY });
+    }
+    row.unshift({ x: 50, y: 85 });   // 玩家自己仍在底部
+    return row;
+  }
+
   var table = (narrow ? SEAT_LAYOUT.narrow : SEAT_LAYOUT.wide)[n];
   if (table){
     return table.map(function(p){ return { x: p[0], y: p[1] }; });
@@ -3001,7 +3070,8 @@ function renderSeats(){
   if (!box) return;
   var n = G.players.length;
   var pos = seatPositions(n);
-  box.className = ((n >= 5) ? 'many ' : '') + (G.dealing ? 'dealing' : '');
+  var settle = isNarrow() && (G.phase === 'over' && !!G.result);
+  box.className = ((n >= 5) ? 'many ' : '') + (G.dealing ? 'dealing ' : '') + (settle ? 'settle' : '');
   box.innerHTML = G.players.map(function(p, i){
     return seatHTML(p, pos[i].x, pos[i].y);
   }).join('');
@@ -3014,6 +3084,8 @@ function renderResult(){
   if (G.phase !== 'over' || !G.result){
     el.className = 'result'; el.innerHTML = '';
     if (flash) flash.hidden = true;
+    var bc0 = document.querySelector('.board-center');
+    if (bc0) bc0.classList.remove('dim');
     return;
   }
 
@@ -3028,6 +3100,10 @@ function renderResult(){
   if (G.result.pending){ el.className = 'result'; el.innerHTML = ''; return; }
 
   el.className = 'result show';
+
+  /* 面板一上来就把中间那坨底池数字压下去：矮屏上它会和顶部座位挤在一起 */
+  var bc = document.querySelector('.board-center');
+  if (bc) bc.classList.add('dim');
 
   /* 这局根本没发牌（筹码不足凑不齐人），只显示原因，不列牌 */
   if (!G.result.winnerIds || !G.result.winnerIds.length){
@@ -3084,6 +3160,57 @@ function renderResult(){
                  hero + rows;
 }
 
+/* 结算面板别压着牌：量出「顶上那排对手」和「自己手牌」之间的空档，
+   面板在这个空档里居中；装不下就限高、内部滚动。
+   原来写死 top:41%，屏幕一矮就直接盖在座位上 */
+function fitResultPanel(el){
+  if (typeof window === 'undefined' || !el) return;
+  var box = document.getElementById('seats');
+  if (!box) return;
+
+  /* 电脑端不用这套：屏幕够大，座位不动、面板按 CSS 的 41% 居中就够了 */
+  if (!isNarrow()){
+    el.style.top = ''; el.style.maxHeight = ''; el.style.overflowY = '';
+    return;
+  }
+
+  var top = -Infinity, bottom = Infinity;
+  var opps = box.querySelectorAll('.seat-opp');
+  for (var i = 0; i < opps.length; i++){
+    var r = opps[i].getBoundingClientRect();
+    if (r.bottom > top) top = r.bottom;
+  }
+  var me = box.querySelector('.seat-me');
+  if (me) bottom = me.getBoundingClientRect().top;
+  /* 「下一局」那一排也压不得。注意不能用 #actionDock 的 rect —— 那个盒子
+     带隐藏子元素，量出来比实际按钮高一大截（320×568 实测 top 差 300px），
+     直接量按钮本身 */
+  var btn = document.querySelector('#actions button');
+  if (btn){
+    var bt = btn.getBoundingClientRect().top;
+    if (bt > top && bt < bottom) bottom = bt;
+  }
+  if (top === -Infinity || bottom === Infinity || bottom - top < 110){
+    el.style.top = ''; el.style.maxHeight = ''; el.style.overflowY = '';
+    return;
+  }
+
+  var pad = 10;
+  var avail = bottom - top - pad * 2;
+  var h = el.offsetHeight;
+  if (h > avail){
+    el.style.maxHeight = avail + 'px';
+    el.style.overflowY = 'auto';
+  } else {
+    el.style.maxHeight = '';
+    el.style.overflowY = '';
+  }
+
+  var po = el.offsetParent;
+  var py = po ? po.getBoundingClientRect().top : 0;
+  el.style.top = Math.round((top + bottom) / 2 - py) + 'px';
+}
+
 function renderActions(){
   var bar = $('#actions');
   if (!bar) return;
@@ -3096,17 +3223,33 @@ function renderActions(){
       return;
     }
     var ableCount = G.players.filter(function(x){ return x.chips >= CONFIG.ante; }).length;
+    var btnHTML;
     if (ableCount < 2 || G.players[0].chips < CONFIG.ante){
       /* 凑不齐一桌：原因写在结算面板里，这里只留按钮 */
-      bar.innerHTML = '<button class="btn-primary" id="btnReset">重置筹码，重新开局</button>';
-      $('#btnReset').onclick = resetChips;
+      btnHTML = '<button class="btn-primary" id="btnReset">重置筹码，重新开局</button>';
+    } else {
+      btnHTML = '<button class="btn-primary btn-main" id="btnNext">下一局</button>' +
+                '<button class="btn-ghost btn-sub" id="btnReset">重置筹码</button>';
+    }
+
+    /* 面板已经出来时，按钮直接长在面板底部。
+       320×568 那种矮屏塞不下「顶上一排对手 + 面板 + 独立按钮」三段，
+       分开摆必定有一方被压住 */
+    var res = document.getElementById('result');
+    if (res && res.classList.contains('show')){
+      bar.innerHTML = '';
+      var acts = document.createElement('div');
+      acts.className = 'actions result-acts';
+      acts.innerHTML = btnHTML;
+      res.appendChild(acts);
+      if ($('#btnNext')) $('#btnNext').onclick = startHand;
+      if ($('#btnReset')) $('#btnReset').onclick = resetChips;
       return;
     }
-    bar.innerHTML =
-      '<button class="btn-primary btn-main" id="btnNext">下一局</button>' +
-      '<button class="btn-ghost btn-sub" id="btnReset">重置筹码</button>';
-    $('#btnNext').onclick = startHand;
-    $('#btnReset').onclick = resetChips;
+
+    bar.innerHTML = btnHTML;
+    if ($('#btnNext')) $('#btnNext').onclick = startHand;
+    if ($('#btnReset')) $('#btnReset').onclick = resetChips;
     return;
   }
 
@@ -3220,6 +3363,13 @@ function render(){
   renderResult();
   renderActions();
   placeDock();
+
+  /* 面板高度要把里面的按钮算进去，所以放在最后量 */
+  var rEl = $('#result');
+  if (rEl){
+    if (rEl.classList.contains('show')) fitResultPanel(rEl);
+    else { rEl.style.top = ''; rEl.style.maxHeight = ''; rEl.style.overflowY = ''; }
+  }
 }
 
 function narrowScreen(){ return isNarrow(); }
