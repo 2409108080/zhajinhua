@@ -708,6 +708,44 @@
   /* 宽屏下这张卡别拉满一整行，也别盖住顶栏的【设置】【规则】 */
   @media (min-width:761px){
     .guide{top:104px;max-width:520px;}
+
+    /* 电脑屏幕大，原来的尺寸是为手机定的，1280 上像一块空桌布上摆着小人。
+       统一放大约 1.25 倍，牌、座位、底池、按钮都跟着长 */
+    .avatar{width:56px;height:56px;font-size:20px;margin-bottom:6px;}
+    .seat-me .avatar{width:58px;height:58px;font-size:22px;}
+    .seat-opp{width:140px;}
+    #seats.many .seat-opp{width:140px;}
+    .seat-opp .seat-name{font-size:13.5px;}
+    .seat-opp .seat-chips{font-size:14px;}
+    .seat-opp .seat-state{font-size:10.5px;}
+    .per-dot{width:8px;height:8px;}
+    .seat-me .seat-name{font-size:15px;}
+    .seat-me .seat-chips{font-size:16px;}
+    .seat-me .seat-state{font-size:11.5px;}
+    .card.small{width:30px;height:43px;}
+    .card.small .r{font-size:13px;}
+    .card.small .s{font-size:11px;}
+    #seats.many .card.small{width:30px;height:43px;}
+    .seat-me .card{width:64px;height:90px;border-radius:9px;}
+    .seat-me .card .r{font-size:22px;}
+    .seat-me .card .s{font-size:18px;}
+
+    .pot-num{font-size:56px;}
+    .pot-label{font-size:12px;letter-spacing:.5em;text-indent:.5em;}
+    .pot-sub{font-size:13px;}
+
+    .actions button{font-size:15px;padding:14px 16px;border-radius:11px;}
+
+    .result.show{width:min(600px, calc(100% - 80px));padding:18px 22px;}
+    .result-title{font-size:15.5px;}
+    .result-title span{font-size:12.5px;}
+    .result-why{font-size:12px;}
+    .result-hero .hero-hand{font-size:13.5px;}
+    .result-hero .hero-gain{font-size:19px;}
+    .rrow{font-size:14px;padding:7px 0;gap:12px;}
+    .rrow .rname{min-width:66px;font-size:14px;}
+    .rrow .rh{font-size:13px;}
+    .rrow .rdelta{font-size:15px;}
   }
 
   /* 矮屏（320×568 这类）引导卡别铺满整张桌 */
@@ -2447,7 +2485,12 @@ function settle(winners, reason){
       log(label + ' ' + bp.amt + ' → ' + ws.map(function(w){ return w.name; }).join('、'));
     });
     names = realWinners.map(function(w){ return w.name; }).join('、');
-    subtitle = potRows.map(function(r){ return r.label + ' ' + r.amt + ' 归 ' + r.names; }).join('；');
+    /* 每一个池都归同一个人时，逐池念一遍名字纯属啰嗦
+       （「主池 270 归皮尔·卡松；边池1 100 归皮尔·卡松；边池2 10 归皮尔·卡松」） */
+    var sameOwner = potRows.length > 1 && potRows.every(function(r){ return r.names === potRows[0].names; });
+    subtitle = sameOwner
+      ? potRows[0].names + ' 一个人拿走整个底池 ' + pot
+      : potRows.map(function(r){ return r.label + ' ' + r.amt + ' 归 ' + r.names; }).join('；');
     log('本局结束（摊牌）：' + subtitle);
   }
 
@@ -3148,8 +3191,9 @@ function renderResult(){
              '</div>';
     }
   }
-  /* 单人单池时抬头已经把牌型和收益说完了，副标题不用再念一遍 */
-  var showSub = !(G.result.winnerIds.length === 1 && pots.length <= 1);
+  /* 单人赢的时候，标题有名字、抬头有牌型和金额、下面还有一行明细，
+     副标题再念一遍就纯属占地方 */
+  var showSub = G.result.winnerIds.length > 1;
   /* 副标题里已经写了「其余玩家全部弃牌」就别再重复一行；
      摊牌收场则必须留这句，不然玩家不知道这局为什么会结束 */
   var showWhy = !!G.result.why && (G.result.showdown || !showSub);
@@ -3414,7 +3458,7 @@ function placeDock(){
       potBottom = potEl.getBoundingClientRect().bottom - brd.top;
     }
     top = Math.max(potBottom + gap, seatTop - dh - gap);
-    if (top + dh > seatTop - 4) top = seatTop - dh - 4;
+    if (top + dh > seatTop - 10) top = seatTop - dh - 10;
   } else {
     top = (me.getBoundingClientRect().top - brd.top) - dh - 12;
   }
@@ -3622,7 +3666,9 @@ function runSelfTests(){
 
   /* 首局引导 */
   var guideOk = $('#guideOk');
-  if (guideOk) guideOk.onclick = closeGuide;
+  /* 「知道了，开打」就该直接开打 —— 原来只关卡片，关完桌中间又冒出一个
+     「轻触开始」，新用户得连点两下才看到第一张牌 */
+  if (guideOk) guideOk.onclick = function(){ closeGuide(); startGame(); };
 
   $('#btnRules').onclick = function(){
     closeGuide();                       // 看过完整规则这条就不用了
