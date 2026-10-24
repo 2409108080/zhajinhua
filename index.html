@@ -4,7 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>炸金花 · 单机版（纯娱乐）</title>
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="description" content="一副牌、三个对手，闷牌还是看牌，比不比这一手。纯单机 AI 牌局，无充值、无联网，打开就能玩。">
+<!-- 转发到微信 / QQ / 微博时的卡片信息；og:image 若挂到正式域名，建议换成绝对地址 -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="炸金花 · 单机版（纯娱乐）">
+<meta property="og:description" content="闷牌还是看牌？跟还是比？五个性格各异的 AI 陪你打一副牌。纯单机，无充值、无联网。">
+<meta property="og:image" content="og.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#0b1611">
 <style>
   /* ==========================================================================
@@ -2517,6 +2524,8 @@ function seatHTML(p, x, y){
 
   var stateTxt = !onTable ? '未上桌'
                : p.folded ? '已弃牌'
+               /* 摊牌后面向玩家的是明牌，再写「闷牌」就跟看到的牌自相矛盾 */
+               : (G.phase === 'over') ? '已摊牌'
                : p.allIn  ? '全下'
                : p.seen   ? '已看牌' : '闷牌';
   if (active && p.thinking) stateTxt = '思考中…';
